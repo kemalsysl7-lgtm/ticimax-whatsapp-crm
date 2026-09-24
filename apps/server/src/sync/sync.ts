@@ -64,6 +64,42 @@ export async function syncMembers(deps: SyncDeps): Promise<{ members: number; co
   return { members: total, consentChanges };
 }
 
+export const ORDER_HISTORY_CURSOR_KEY = "orders.history_until";
+/** Geçmiş siparişler bu uzunlukta pencerelerle okunur (Ticimax'e tek seferde büyük sorgu atılmaz). */
+export const HISTORY_WINDOW_DAYS = 90;
+/** Bir senkron turunda en fazla bu kadar pencere işlenir; kalan kısım sonraki turlarda devam eder. */
+export const HISTORY_WINDOWS_PER_RUN = 8;
+
+/**
+ * Segmentasyon için tüm sipariş geçmişini bir kez doldurur (backfill). `historyStart`'tan
+ * başlayıp son 30 günlük pencereye (onu `syncOrders` okur) ulaşana kadar ilerler; kaldığı yer
+ * imleçte tutulur. Tamamlandıktan sonra her çağrı hiçbir şey yapmaz.
+ */
+export async function syncOrderHistory(
+  deps: SyncDeps,
+  historyStart: Date,
+): Promise<{ orders: number; windows: number; done: boolean }> {
+  const end = new Date(deps.clock.now().getTime() - ORDER_LOOKBACK_DAYS * 86_400_000);
+  const cursor = await deps.mirror.getCursor(ORDER_HISTORY_CURSOR_KEY);
+  let from = cursor ? new Date(cursor) : historyStart;
+  let total = 0;
+  let windows = 0;
+
+  while (from < end && windows < HISTORY_WINDOWS_PER_RUN) {
+    const to = new Date(Math.min(from.getTime() + HISTORY_WINDOW_DAYS * 86_400_000, end.getTime()));
+    for (let offset = 0; ; offset += PAGE_SIZE) {
+      const batch = await deps.source.selectOrders({ from, to, offset, pageSize: PAGE_SIZE });
+      await deps.mirror.upsertOrders(batch);
+      total += batch.length;
+      if (batch.length < PAGE_SIZE) break;
+    }
+    from = to;
+    windows++;
+    await deps.mirror.setCursor(ORDER_HISTORY_CURSOR_KEY, from.toISOString());
+  }
+  return { orders: total, windows, done: from >= end };
+}
+
 export async function syncOrders(
   deps: SyncDeps,
 ): Promise<{ orders: number; statusChanges: Array<{ order: Order; previousStatus: number | null }> }> {

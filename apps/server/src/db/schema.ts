@@ -117,6 +117,7 @@ export const messages = pgTable(
     errorCode: integer("error_code"),
     errorMessage: text("error_message"),
     pricingCategory: text("pricing_category"),
+    campaignId: integer("campaign_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }),
     ...timestamps,
   },
@@ -124,8 +125,42 @@ export const messages = pgTable(
     uniqueIndex("messages_dedupe_key_uq").on(t.dedupeKey),
     uniqueIndex("messages_wa_message_id_uq").on(t.waMessageId),
     index("messages_phone_sent_idx").on(t.phone, t.category, t.sentAt),
+    index("messages_member_idx").on(t.memberTicimaxId),
+    index("messages_campaign_idx").on(t.campaignId),
   ],
 );
+
+/** Her müşterinin son hesaplanan RFM segmenti (gece + panelden elle yeniden hesaplanır). */
+export const customerSegments = pgTable(
+  "customer_segments",
+  {
+    memberTicimaxId: integer("member_ticimax_id").primaryKey(),
+    segment: text("segment").notNull(),
+    orderCount: integer("order_count").notNull(),
+    totalSpent: numeric("total_spent", { precision: 14, scale: 2 }).notNull(),
+    lastOrderAt: timestamp("last_order_at", { withTimezone: true }),
+    recencyDays: integer("recency_days"),
+    r: integer("r").notNull(),
+    f: integer("f").notNull(),
+    m: integer("m").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [index("customer_segments_segment_idx").on(t.segment)],
+);
+
+/** Bir segmente gönderilen toplu kampanya. Mesajlar `messages.campaign_id` ile bağlanır. */
+export const campaigns = pgTable("campaigns", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  segment: text("segment").notNull(),
+  templateId: integer("template_id")
+    .notNull()
+    .references(() => templates.id),
+  variables: jsonb("variables").notNull(),
+  audienceSize: integer("audience_size").notNull(),
+  queuedCount: integer("queued_count").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Müşteriden gelen mesajlar (chatbot + 24 saatlik pencere takibi). */
 export const inboundMessages = pgTable(

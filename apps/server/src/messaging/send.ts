@@ -27,6 +27,7 @@ export async function enqueueMessage(
     memberTicimaxId: number | null;
     templateName: string;
     variables: VariableValues;
+    campaignId?: number | null;
   },
 ): Promise<EnqueueResult> {
   const template = await deps.templates.getByName(input.templateName);
@@ -39,6 +40,7 @@ export async function enqueueMessage(
     templateId: template.id,
     category: template.category,
     variables: input.variables,
+    campaignId: input.campaignId ?? null,
   });
   if (id === null) return { messageId: null, created: false, reason: "duplicate" };
 

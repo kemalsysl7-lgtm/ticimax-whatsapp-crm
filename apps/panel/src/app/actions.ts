@@ -23,7 +23,7 @@ export async function loginAction(_: { error: string | null }, form: FormData): 
   }
   loginLimiter.reset(ip);
   await startSession();
-  redirect("/templates");
+  redirect("/segments");
 }
 
 export async function logoutAction(): Promise<void> {
@@ -103,6 +103,37 @@ export async function addConsentAction(_: ActionResult | null, form: FormData): 
       note: String(form.get("note") ?? "") || undefined,
     });
     return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function recomputeSegmentsAction(): Promise<void> {
+  await requireSession();
+  await api.recomputeSegments();
+  revalidatePath("/segments");
+}
+
+export async function segmentReachAction(segment: string): Promise<ActionResult<{ withPhone: number; withMarketingConsent: number }>> {
+  await requireSession();
+  try {
+    return { ok: true, data: await api.segmentReach(segment) };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function launchCampaignAction(input: {
+  name: string;
+  segment: string;
+  templateName: string;
+  variables: Record<string, string>;
+}): Promise<ActionResult<{ campaignId: number; queued: number }>> {
+  await requireSession();
+  try {
+    const data = await api.launchCampaign(input);
+    revalidatePath("/campaigns");
+    return { ok: true, data };
   } catch (err) {
     return fail(err);
   }

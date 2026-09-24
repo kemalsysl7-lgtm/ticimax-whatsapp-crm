@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
 import type { Worker } from "bullmq";
 import { processQueuedMessage } from "../messaging/send";
-import { syncMembers, syncOrders } from "../sync/sync";
+import { syncMembers, syncOrderHistory, syncOrders } from "../sync/sync";
 import { CONTAINER, type Container } from "./container";
 import { startMessageWorker } from "./queue";
 
@@ -42,9 +42,13 @@ export class BackgroundJobs implements OnApplicationBootstrap, OnApplicationShut
     this.syncing = true;
     try {
       const m = await syncMembers(this.c.syncDeps);
+      const h = await syncOrderHistory(this.c.syncDeps, this.c.env.ORDER_HISTORY_START);
       const o = await syncOrders(this.c.syncDeps);
+      const s = await this.c.recomputeSegments();
       this.logger.log(
-        `Senkron: ${m.members} üye, ${m.consentChanges} izin değişikliği, ${o.orders} sipariş, ${o.statusChanges.length} durum değişikliği`,
+        `Senkron: ${m.members} üye, ${m.consentChanges} izin değişikliği, ${o.orders} sipariş, ${o.statusChanges.length} durum değişikliği` +
+          (h.windows ? `, geçmiş: ${h.orders} sipariş (${h.done ? "tamamlandı" : "devam ediyor"})` : "") +
+          `, ${s.customers} müşteri segmentlendi`,
       );
       // Faz 2: o.statusChanges → sipariş/kargo bildirimi kuyruğa alınacak.
     } catch (err) {

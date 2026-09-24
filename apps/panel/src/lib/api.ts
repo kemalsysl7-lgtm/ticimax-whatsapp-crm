@@ -1,6 +1,19 @@
 import "server-only";
 import { panelEnv } from "./env";
-import type { MessageRow, TemplateInput, TemplateItem, TemplatePreviewResult, TriggerCatalog, ValidationIssue } from "./types";
+import type {
+  CampaignRow,
+  CustomerDetail,
+  CustomerRow,
+  MessageRow,
+  OrderRow,
+  Paged,
+  SegmentOverview,
+  TemplateInput,
+  TemplateItem,
+  TemplatePreviewResult,
+  TriggerCatalog,
+  ValidationIssue,
+} from "./types";
 
 /**
  * Sunucu API'sine yalnızca panel sunucusundan erişilir; ADMIN_API_TOKEN tarayıcıya gitmez.
@@ -46,4 +59,18 @@ export const api = {
     call<{ messageId: number }>("/admin/messages/test", { method: "POST", body }),
   addConsent: (body: { phone: string; purpose: "transactional" | "marketing"; granted: boolean; note?: string }) =>
     call<{ ok: true }>("/admin/consents", { method: "POST", body }),
+  customers: (p: { q?: string; segment?: string; page?: number }) => call<Paged<CustomerRow>>(`/admin/customers${qs(p)}`),
+  customer: (id: number) => call<CustomerDetail>(`/admin/customers/${id}`),
+  orders: (p: { q?: string; status?: string; page?: number }) => call<Paged<OrderRow>>(`/admin/orders${qs(p)}`),
+  segments: () => call<SegmentOverview>("/admin/segments"),
+  recomputeSegments: () => call<{ customers: number }>("/admin/segments/recompute", { method: "POST" }),
+  segmentReach: (key: string) => call<{ withPhone: number; withMarketingConsent: number }>(`/admin/segments/${encodeURIComponent(key)}/reach`),
+  campaigns: () => call<CampaignRow[]>("/admin/campaigns"),
+  launchCampaign: (body: { name: string; segment: string; templateName: string; variables: Record<string, string> }) =>
+    call<{ campaignId: number; audienceSize: number; queued: number }>("/admin/campaigns", { method: "POST", body }),
 };
+
+function qs(params: Record<string, string | number | undefined>): string {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== "");
+  return entries.length ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString()}` : "";
+}

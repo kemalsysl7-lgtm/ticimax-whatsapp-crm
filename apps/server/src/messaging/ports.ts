@@ -29,6 +29,7 @@ export interface NewMessage {
   templateId: number;
   category: TemplateCategory;
   variables: VariableValues;
+  campaignId?: number | null;
 }
 
 export interface MessageStore {

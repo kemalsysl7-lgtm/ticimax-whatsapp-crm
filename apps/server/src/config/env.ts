@@ -29,6 +29,12 @@ export const envSchema = z.object({
     .default("true")
     .transform((v) => v === "true"),
   SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(1).default(15),
+  /** Segmentasyon için sipariş geçmişinin okunacağı başlangıç tarihi (YYYY-MM-DD). */
+  ORDER_HISTORY_START: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .default("2018-01-01")
+    .transform((v) => new Date(`${v}T00:00:00Z`)),
 });
 
 export type Env = z.infer<typeof envSchema>;

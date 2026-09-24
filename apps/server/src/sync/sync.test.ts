@@ -1,7 +1,51 @@
 import { describe, expect, it, vi } from "vitest";
 import { FakeConsentStore, fixedClock } from "../messaging/fakes";
 import type { Member, Order } from "../ticimax/mapper";
-import { MEMBER_CURSOR_KEY, PAGE_SIZE, syncMembers, syncOrders, type MirrorStore } from "./sync";
+import {
+  HISTORY_WINDOWS_PER_RUN,
+  MEMBER_CURSOR_KEY,
+  ORDER_HISTORY_CURSOR_KEY,
+  PAGE_SIZE,
+  syncMembers,
+  syncOrderHistory,
+  syncOrders,
+  type MirrorStore,
+} from "./sync";
+
+describe("syncOrderHistory", () => {
+  const mirror = () => new FakeMirrorForHistory();
+  class FakeMirrorForHistory implements MirrorStore {
+    cursors = new Map<string, string>();
+    async upsertMembers() {}
+    async upsertOrders() {
+      return [];
+    }
+    async getCursor(key: string) {
+      return this.cursors.get(key) ?? null;
+    }
+    async setCursor(key: string, cursor: string) {
+      this.cursors.set(key, cursor);
+    }
+  }
+
+  it("geçmişi 90 günlük pencerelerle, tur başına sınırlı okur ve kaldığı yerden devam eder", async () => {
+    const m = mirror();
+    const selectOrders = vi.fn(async (_p: { from: Date; to: Date; offset: number }) => [] as Order[]);
+    const deps = { source: { selectMembers: vi.fn(), selectOrders }, mirror: m, consents: new FakeConsentStore(), clock: fixedClock("2026-09-24T12:00:00Z") };
+
+    const first = await syncOrderHistory(deps, new Date("2022-01-01T00:00:00Z"));
+    expect(first).toMatchObject({ windows: HISTORY_WINDOWS_PER_RUN, done: false });
+    expect(selectOrders.mock.calls[0]![0]).toMatchObject({ from: new Date("2022-01-01T00:00:00Z"), to: new Date("2022-04-01T00:00:00Z") });
+
+    let result = first;
+    for (let i = 0; i < 10 && !result.done; i++) result = await syncOrderHistory(deps, new Date("2022-01-01T00:00:00Z"));
+    expect(result.done).toBe(true);
+    // Son pencere, son 30 günün başında (syncOrders'ın okuduğu aralık) biter.
+    expect(m.cursors.get(ORDER_HISTORY_CURSOR_KEY)).toBe("2026-08-25T12:00:00.000Z");
+    const again = await syncOrderHistory(deps, new Date("2022-01-01T00:00:00Z"));
+    expect(again).toEqual({ orders: 0, windows: 0, done: true });
+  });
+});
 
 const member = (id: number, sms = true, phone: string | null = `9053200000${String(id).padStart(2, "0")}`): Member => ({
   ticimaxId: id,

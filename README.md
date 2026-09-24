@@ -53,10 +53,25 @@ docker compose up -d                 # PostgreSQL + Redis
 cp .env.example .env                 # değerleri doldurun
 cd apps/server
 pnpm build && pnpm db:migrate
+pnpm db:seed-demo                    # isteğe bağlı: Ticimax olmadan denemek için ~240 örnek müşteri
 pnpm dev
 ```
 
-Testler: `pnpm --filter @crm/server test` · Tip kontrolü: `pnpm --filter @crm/server typecheck`
+Testler: `pnpm -r test` · Tip kontrolü: `pnpm -r typecheck`
+
+## Müşteri segmentasyonu (RFM)
+
+Her müşteri; son alışverişten bu yana geçen süre (R), sipariş sayısı (F) ve toplam harcamaya (M) göre
+1-5 puanlanır ve bir segmente atanır: Şampiyonlar (VIP), Sadık, Potansiyel sadık, Yeni, Tek seferlik,
+Risk altında, **Uyuyan**, Kaybedilmiş, İlgi bekleyen, Hiç alışveriş yapmamış. İptal/iade edilmiş
+siparişler sayılmaz. Kurallar ve eşikler: `apps/server/src/segments/rfm.ts`.
+
+- Segmentler her senkron turunun sonunda ve panelden "Yeniden hesapla" ile güncellenir.
+- İlk çalıştırmada sipariş geçmişi `ORDER_HISTORY_START` tarihinden (varsayılan 2018-01-01) itibaren
+  90 günlük pencerelerle, birkaç senkron turuna yayılarak okunur.
+- **Kampanya:** Bir segmente, "Segment kampanyası" tetikleyicili onaylı bir şablonla toplu mesaj gönderilir.
+  Müşteri adı ve segment adı otomatik doldurulur; izin, sessiz saat ve haftalık sınır her mesajda uygulanır.
+  Aynı kampanya bir müşteriye iki kez gitmez.
 
 Şema değişikliğinde: `src/db/schema.ts` düzenlenir, `pnpm db:generate` ile yeni migration üretilir.
 
@@ -92,9 +107,17 @@ dışarıdan erişilemez; panel ona iç Docker ağından bağlanır.
 
 ## Yönetim paneli (`apps/panel`)
 
-Next.js arayüzü. Özellikler: şifreli giriş, şablon listesi ve onay durumları, şablon editörü (değişken çipleri,
-buton düzenleyici, Meta kurallarıyla anlık doğrulama, WhatsApp balonu önizlemesi, Meta onayına gönderme),
-onaylı şablonla test mesajı, mesaj geçmişi, elle izin kaydı.
+Next.js arayüzü. Sayfalar:
+- **Segmentler:** RFM özet paneli (müşteri sayısı, ciro, VIP ciro payı, geri kazanılması gereken müşteri
+  sayısı), segment kartları, müşteri listesine ve kampanyaya geçiş.
+- **Müşteriler:** arama (ad, e-posta, telefon), segment filtresi, harcama/son alışveriş/izin durumu;
+  müşteri detayında RFM puanı, izin geçmişi (kanıtıyla), gönderilen mesajlar ve siparişler.
+- **Siparişler:** arama (sipariş no, müşteri, takip no) ve durum filtresi.
+- **Kampanyalar:** segment + şablon seçimi, tahmini erişim, WhatsApp önizlemesi, onaylı gönderim;
+  kampanya bazında gönderilen/iletilen/okunan/atlanan sayıları.
+- **Şablonlar:** editör (değişken çipleri, butonlar, Meta kurallarıyla anlık doğrulama, önizleme,
+  Meta onayına gönderme), onaylı şablonla test mesajı.
+- **Mesajlar** ve **İzinler** (elle izin kaydı).
 
 - Tek yönetici şifresi (`PANEL_PASSWORD`). Başarılı girişte `PANEL_SESSION_SECRET` ile imzalı, 12 saat
   geçerli, HttpOnly + SameSite=Strict bir çerez verilir. Aynı IP'den 15 dakikada 10 hatalı deneme sonrası
@@ -125,7 +148,7 @@ Tüm `/admin/*` uç noktaları `Authorization: Bearer <ADMIN_API_TOKEN>` ister v
 | 1 – Temel | Ticimax adapter + üye/sipariş senkronu, WhatsApp adapter + imzalı webhook, izin defteri, şablon motoru + API, gönderim kuyruğu ve log + yönetim paneli | ✅ |
 | 2 – Hızlı kazanımlar | Kargo bildirimi, "Siparişim nerede?" chatbotu, terk edilmiş sepet | ⏳ |
 | 3 – Bildirimler | Fiyat/stok alarmı, doğum günü ve yıldönümü | ⏳ |
-| 4 – Segmentasyon | RFM, segment kampanyaları | ⏳ |
+| 4 – Segmentasyon | Müşteri ve sipariş sayfaları, sipariş geçmişi doldurma, RFM segmentleri, segment kampanyaları | ✅ |
 | 5 – Uyumluluk | İYS entegrasyonu, raporlama | ⏳ |
 
 ## Gerçek sistemlerle henüz doğrulanmamış noktalar

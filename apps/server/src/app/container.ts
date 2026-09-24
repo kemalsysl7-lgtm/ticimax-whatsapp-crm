@@ -1,5 +1,10 @@
+import { eq } from "drizzle-orm";
 import type { Env } from "../config/env";
+import { AdminQueries } from "../db/admin-queries";
 import { createDb } from "../db/client";
+import { campaigns } from "../db/schema";
+import type { CampaignDeps } from "../segments/campaign";
+import { segmentCustomers } from "../segments/rfm";
 import {
   DrizzleConsentStore,
   DrizzleInboundStore,
@@ -64,6 +69,33 @@ export function createContainer(env: Env) {
 
   const syncDeps: SyncDeps = { source: ticimax, mirror, consents, clock };
 
+  const adminQueries = new AdminQueries(db);
+
+  const campaignDeps: CampaignDeps = {
+    templates,
+    messages,
+    queue,
+    audience: (segment) => adminQueries.segmentAudience(segment),
+    createCampaign: async (r) => {
+      const [row] = await db
+        .insert(campaigns)
+        .values({ ...r, queuedCount: 0 })
+        .returning({ id: campaigns.id });
+      return row!.id;
+    },
+    setQueuedCount: async (id, queued) => {
+      await db.update(campaigns).set({ queuedCount: queued }).where(eq(campaigns.id, id));
+    },
+  };
+
+  /** Tüm müşterilerin RFM segmentini yeniden hesaplar ve kaydeder. */
+  const recomputeSegments = async () => {
+    const now = clock.now();
+    const result = segmentCustomers(await adminQueries.customerStats(), now);
+    await adminQueries.saveSegments(result, now);
+    return { customers: result.length, computedAt: now.toISOString() };
+  };
+
   return {
     env,
     db,
@@ -78,6 +110,9 @@ export function createContainer(env: Env) {
     sendDeps,
     inboundDeps,
     syncDeps,
+    adminQueries,
+    campaignDeps,
+    recomputeSegments,
   };
 }
 

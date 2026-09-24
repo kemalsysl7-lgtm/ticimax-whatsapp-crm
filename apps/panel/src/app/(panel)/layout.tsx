@@ -5,6 +5,10 @@ import { logoutAction } from "../actions";
 export const dynamic = "force-dynamic";
 
 const NAV = [
+  { href: "/segments", label: "Segmentler" },
+  { href: "/customers", label: "Müşteriler" },
+  { href: "/orders", label: "Siparişler" },
+  { href: "/campaigns", label: "Kampanyalar" },
   { href: "/templates", label: "Şablonlar" },
   { href: "/messages", label: "Mesajlar" },
   { href: "/consents", label: "İzinler" },
