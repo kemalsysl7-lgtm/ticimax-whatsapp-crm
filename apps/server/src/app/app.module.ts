@@ -1,0 +1,25 @@
+import { Controller, Get, Module, type DynamicModule } from "@nestjs/common";
+import { AdminController } from "./admin.controller";
+import { AdminGuard } from "./admin.guard";
+import { BackgroundJobs } from "./background";
+import { CONTAINER, type Container } from "./container";
+import { WebhookController } from "./webhook.controller";
+
+@Controller("health")
+class HealthController {
+  @Get()
+  health() {
+    return { status: "ok" };
+  }
+}
+
+@Module({})
+export class AppModule {
+  static register(container: Container): DynamicModule {
+    return {
+      module: AppModule,
+      controllers: [HealthController, WebhookController, AdminController],
+      providers: [{ provide: CONTAINER, useValue: container }, AdminGuard, BackgroundJobs],
+    };
+  }
+}
