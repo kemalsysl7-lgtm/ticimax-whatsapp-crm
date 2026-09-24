@@ -51,9 +51,65 @@ export const orders = pgTable(
     orderedAt: timestamp("ordered_at", { withTimezone: true }),
     cargoCompanyId: integer("cargo_company_id"),
     trackingNo: text("tracking_no"),
+    /** Kargo paketinden (SelectSiparisKargoPaket) gelen bilgiler; kargoya verilince doldurulur. */
+    carrierName: text("carrier_name"),
+    trackingLink: text("tracking_link"),
     ...timestamps,
   },
-  (t) => [index("orders_member_idx").on(t.memberTicimaxId), index("orders_delivery_phone_idx").on(t.deliveryPhone)],
+  (t) => [
+    index("orders_member_idx").on(t.memberTicimaxId),
+    index("orders_delivery_phone_idx").on(t.deliveryPhone),
+    index("orders_ordered_at_idx").on(t.orderedAt),
+  ],
+);
+
+/** Ticimax sepetlerinin yerel kopyası (terk edilmiş sepet hatırlatması için). */
+export const carts = pgTable(
+  "carts",
+  {
+    cartId: integer("cart_id").primaryKey(),
+    memberTicimaxId: integer("member_ticimax_id"),
+    cartUpdatedAt: timestamp("cart_updated_at", { withTimezone: true }),
+    items: jsonb("items").notNull(),
+    total: numeric("total", { precision: 14, scale: 2 }).notNull(),
+    ...timestamps,
+  },
+  (t) => [index("carts_updated_idx").on(t.cartUpdatedAt)],
+);
+
+/** Otomasyon ayarları (panelden yönetilir). */
+export const automations = pgTable("automations", {
+  key: text("key").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  templateName: text("template_name"),
+  settings: jsonb("settings").notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** WhatsApp konuşmaları (gelen kutusu). Bir telefon = bir konuşma. */
+export const conversations = pgTable("conversations", {
+  phone: text("phone").primaryKey(),
+  memberTicimaxId: integer("member_ticimax_id"),
+  profileName: text("profile_name"),
+  needsHuman: boolean("needs_human").notNull().default(false),
+  lastInboundAt: timestamp("last_inbound_at", { withTimezone: true }),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull(),
+  lastMessagePreview: text("last_message_preview"),
+});
+
+/** Konuşma içindeki serbest metin mesajları (müşteri, asistan, temsilci). */
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: serial("id").primaryKey(),
+    phone: text("phone").notNull(),
+    direction: text("direction", { enum: ["in", "out"] }).notNull(),
+    author: text("author", { enum: ["customer", "bot", "agent"] }).notNull(),
+    text: text("text").notNull(),
+    waMessageId: text("wa_message_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("chat_messages_phone_idx").on(t.phone, t.createdAt)],
 );
 
 /** Append-only izin defteri. Bir numara + amaç için geçerli durum = en son kayıt. */

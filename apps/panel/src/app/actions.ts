@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, automationApi } from "@/lib/api";
 import { panelEnv } from "@/lib/env";
 import { endSession, requireSession, startSession } from "@/lib/session";
 import { LoginRateLimiter, passwordMatches } from "@/lib/session-token";
@@ -106,6 +106,48 @@ export async function addConsentAction(_: ActionResult | null, form: FormData): 
   } catch (err) {
     return fail(err);
   }
+}
+
+export async function saveAutomationAction(
+  key: string,
+  body: { enabled: boolean; templateName: string | null; settings: Record<string, unknown> },
+): Promise<ActionResult> {
+  await requireSession();
+  try {
+    await automationApi.save(key, body);
+    revalidatePath("/automations");
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function runAutomationsNowAction(): Promise<ActionResult> {
+  await requireSession();
+  try {
+    await automationApi.runNow();
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function replyAction(phone: string, text: string): Promise<ActionResult> {
+  await requireSession();
+  try {
+    await automationApi.reply(phone, text);
+    revalidatePath(`/inbox/${phone}`);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return fail(err);
+  }
+}
+
+export async function resolveConversationAction(phone: string): Promise<void> {
+  await requireSession();
+  await automationApi.resolve(phone);
+  revalidatePath("/inbox");
+  revalidatePath(`/inbox/${phone}`);
 }
 
 export async function recomputeSegmentsAction(): Promise<void> {

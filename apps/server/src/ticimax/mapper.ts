@@ -155,3 +155,60 @@ export function mapShipmentPackage(raw: Raw): ShipmentPackage | null {
     createdAt: toDate(raw.EklenmeTarihi),
   };
 }
+
+export interface Cart {
+  cartId: number;
+  memberTicimaxId: number | null;
+  updatedAt: Date | null;
+  items: Array<{ name: string; quantity: number; unitPrice: number }>;
+  total: number;
+}
+
+/**
+ * WebSepet → Cart. Ticimax'te "...KDV" alanları KDV tutarını, "...KDVli" alanları KDV dahil
+ * fiyatı taşır (GetSepet dokümanı); satır fiyatı bu yüzden net + KDV tutarıdır.
+ */
+export function mapCart(raw: Raw): Cart | null {
+  const id = num(raw.ID);
+  if (!id) return null;
+  const items = toArray((raw.Urunler as Raw | undefined)?.WebSepetUrun).map((u) => ({
+    name: str(u.UrunAdi) ?? "Ürün",
+    quantity: num(u.Adet) ?? 1,
+    unitPrice: (num(u.UrunSepetFiyati) ?? 0) + (num(u.UrunSepetFiyatiKDV) ?? 0),
+  }));
+  return {
+    cartId: id,
+    memberTicimaxId: num(raw.UyeID) || null,
+    updatedAt: toDate(raw.SepetTarihi),
+    items,
+    total: Math.round(items.reduce((a, i) => a + i.unitPrice * i.quantity, 0) * 100) / 100,
+  };
+}
+
+export interface ProductAlarm {
+  alarmId: number;
+  memberTicimaxId: number;
+  productName: string;
+  productUrl: string | null;
+  /** Fiyat alarmında: alarm kurulduğu andaki (vitrindeki) fiyat. */
+  priceWhenAdded: number;
+  /** KDV dahil güncel fiyat (UrunFiyati + UrunFiyatiKdv). */
+  currentPrice: number;
+  stock: number;
+}
+
+/** WebFiyatAlarmUrunler / WebStokAlarmUrunler → ProductAlarm. */
+export function mapProductAlarm(raw: Raw, idField: "FiyatAlarmUrunID" | "StokAlarmUrunId"): ProductAlarm | null {
+  const id = num(raw[idField]);
+  const member = num(raw.UyeID);
+  if (!id || !member) return null;
+  return {
+    alarmId: id,
+    memberTicimaxId: member,
+    productName: str(raw.UrunAdi) ?? "Ürün",
+    productUrl: str(raw.UrunUrl),
+    priceWhenAdded: num(raw.EklenenFiyat) ?? 0,
+    currentPrice: Math.round(((num(raw.UrunFiyati) ?? 0) + (num(raw.UrunFiyatiKdv) ?? 0)) * 100) / 100,
+    stock: num(raw.ToplamStokAdedi) ?? 0,
+  };
+}

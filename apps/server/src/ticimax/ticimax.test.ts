@@ -1,6 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 import { TicimaxClient, TicimaxError, wcfOrder, type SoapClientLike } from "./client";
-import { mapMember, mapOrder, mapShipmentPackage, toDate, toDateOnly } from "./mapper";
+import { mapCart, mapMember, mapOrder, mapProductAlarm, mapShipmentPackage, toDate, toDateOnly } from "./mapper";
+
+describe("sepet ve alarm eşleyicileri", () => {
+  it("sepeti ürünler ve KDV dahil toplamla eşler", () => {
+    const cart = mapCart({
+      ID: "73",
+      UyeID: 1,
+      SepetTarihi: "2026-09-24T10:00:00",
+      Urunler: { WebSepetUrun: [
+        { UrunAdi: "Keten Gömlek", Adet: 2, UrunSepetFiyati: "500", UrunSepetFiyatiKDV: "100" },
+        { UrunAdi: "Kemer", Adet: "1", UrunSepetFiyati: 41.58, UrunSepetFiyatiKDV: 8.32 },
+      ] },
+    });
+    expect(cart).toMatchObject({ cartId: 73, memberTicimaxId: 1, total: 1249.9 });
+    expect(cart?.items.map((i) => i.name)).toEqual(["Keten Gömlek", "Kemer"]);
+  });
+
+  it("tek ürünlü sepeti (dizi olmayan) de eşler", () => {
+    expect(mapCart({ ID: 5, Urunler: { WebSepetUrun: { UrunAdi: "Şapka", Adet: 1, UrunSepetFiyati: 100, UrunSepetFiyatiKDV: 20 } } })?.items).toHaveLength(1);
+  });
+
+  it("fiyat alarmını güncel KDV dahil fiyatla eşler", () => {
+    expect(mapProductAlarm({ FiyatAlarmUrunID: 9, UyeID: 1, UrunAdi: "Gömlek", EklenenFiyat: 900, UrunFiyati: 541.58, UrunFiyatiKdv: 108.32, ToplamStokAdedi: 4, UrunUrl: "/gomlek" }, "FiyatAlarmUrunID"))
+      .toEqual({ alarmId: 9, memberTicimaxId: 1, productName: "Gömlek", productUrl: "/gomlek", priceWhenAdded: 900, currentPrice: 649.9, stock: 4 });
+    expect(mapProductAlarm({ UyeID: 1 }, "StokAlarmUrunId")).toBeNull();
+  });
+});
 
 describe("mapper", () => {
   it("üyeyi normalize eder", () => {

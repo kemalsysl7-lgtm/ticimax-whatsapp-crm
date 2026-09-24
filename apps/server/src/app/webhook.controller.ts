@@ -12,7 +12,8 @@ import {
 } from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { Request } from "express";
-import { handleInboundMessage } from "../messaging/inbound";
+import { handleChatbot } from "../chatbot/handler";
+import { REPLY_OPTED_IN, REPLY_OPTED_OUT, handleInboundMessage } from "../messaging/inbound";
 import { verifyMetaSignature } from "../whatsapp/signature";
 import { parseWebhook } from "../whatsapp/webhook-parser";
 import { CONTAINER, type Container } from "./container";
@@ -59,7 +60,34 @@ export class WebhookController {
             buttonText: event.buttonText,
             receivedAt: event.timestamp,
           });
-          if (outcome !== "stored" && outcome !== "duplicate") this.logger.log(`İzin değişikliği: ${outcome}`);
+          if (outcome === "duplicate") break;
+          const text = event.text ?? event.buttonText ?? `[${event.type}]`;
+          const member = await this.c.automationQueries.memberByPhone(event.from);
+          await this.c.automationQueries.recordChat({
+            phone: event.from,
+            direction: "in",
+            author: "customer",
+            text,
+            waMessageId: event.waMessageId,
+            at: event.timestamp,
+            memberTicimaxId: member?.id ?? null,
+            profileName: event.profileName,
+          });
+          if (outcome === "stored") {
+            const bot = await handleChatbot(this.c.chatbotDeps, event.from, text);
+            if (bot === "reply_failed") this.logger.warn("Asistan yanıtı gönderilemedi");
+          } else {
+            this.logger.log(`İzin değişikliği: ${outcome}`);
+            if (!outcome.endsWith("_reply_failed")) {
+              await this.c.automationQueries.recordChat({
+                phone: event.from,
+                direction: "out",
+                author: "bot",
+                text: outcome === "opted_in" ? REPLY_OPTED_IN : REPLY_OPTED_OUT,
+                at: this.c.clock.now(),
+              });
+            }
+          }
           break;
         }
         case "status":

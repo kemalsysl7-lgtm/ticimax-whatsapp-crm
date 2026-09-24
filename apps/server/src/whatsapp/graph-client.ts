@@ -8,6 +8,8 @@ export interface GraphClientConfig {
   phoneNumberId: string;
   businessAccountId: string;
   accessToken: string;
+  /** Varsayılan https://graph.facebook.com; yalnızca test/staging için değiştirilir. */
+  baseUrl?: string;
 }
 
 export class GraphApiError extends Error {
@@ -41,7 +43,7 @@ export class GraphClient {
     private readonly config: GraphClientConfig,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {
-    this.baseUrl = `https://graph.facebook.com/${config.apiVersion}`;
+    this.baseUrl = `${(config.baseUrl ?? "https://graph.facebook.com").replace(/\/$/, "")}/${config.apiVersion}`;
   }
 
   private async request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {

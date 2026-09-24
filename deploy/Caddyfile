@@ -8,6 +8,10 @@
 	handle /health {
 		reverse_proxy server:3000
 	}
+	# İmzalı kargo takip yönlendirmesi (WhatsApp mesajındaki "Kargom nerede?" butonu).
+	handle /t/* {
+		reverse_proxy server:3000
+	}
 
 	# Yönetim API'si (/admin/*) dışarı açılmaz; panel ona iç ağdan erişir.
 	# Geri kalan her şey panele gider.

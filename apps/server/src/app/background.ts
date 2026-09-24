@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from "@nestjs/common";
 import type { Worker } from "bullmq";
+import { runAbandonedCarts, runAlarms, runBirthdays, runOrderNotifications } from "../automations/runner";
 import { processQueuedMessage } from "../messaging/send";
 import { syncMembers, syncOrderHistory, syncOrders } from "../sync/sync";
 import { CONTAINER, type Container } from "./container";
@@ -50,11 +51,35 @@ export class BackgroundJobs implements OnApplicationBootstrap, OnApplicationShut
           (h.windows ? `, geçmiş: ${h.orders} sipariş (${h.done ? "tamamlandı" : "devam ediyor"})` : "") +
           `, ${s.customers} müşteri segmentlendi`,
       );
-      // Faz 2: o.statusChanges → sipariş/kargo bildirimi kuyruğa alınacak.
+      await this.step("Sipariş bildirimleri", async () => {
+        const n = await runOrderNotifications(this.c.runnerDeps, o.statusChanges);
+        return n ? `${n} mesaj kuyruğa alındı` : null;
+      });
     } catch (err) {
       this.logger.error(`Senkron başarısız: ${(err as Error).message}`);
-    } finally {
-      this.syncing = false;
+    }
+    // Her otomasyon birbirinden bağımsız: biri hata verirse diğerleri yine çalışır.
+    await this.step("Terk edilmiş sepet", async () => {
+      const r = await runAbandonedCarts(this.c.runnerDeps);
+      return r.queued ? `${r.carts} sepet, ${r.queued} hatırlatma kuyruğa alındı` : null;
+    });
+    await this.step("Fiyat/stok alarmları", async () => {
+      const r = await runAlarms(this.c.runnerDeps);
+      return r ? `${r.checkedMembers} üye kontrol edildi, ${r.queued} mesaj kuyruğa alındı` : null;
+    });
+    await this.step("Doğum günü", async () => {
+      const n = await runBirthdays(this.c.runnerDeps);
+      return n === null ? null : `${n} mesaj kuyruğa alındı`;
+    });
+    this.syncing = false;
+  }
+
+  private async step(name: string, fn: () => Promise<string | null>): Promise<void> {
+    try {
+      const result = await fn();
+      if (result) this.logger.log(`${name}: ${result}`);
+    } catch (err) {
+      this.logger.error(`${name} başarısız: ${(err as Error).message}`);
     }
   }
 

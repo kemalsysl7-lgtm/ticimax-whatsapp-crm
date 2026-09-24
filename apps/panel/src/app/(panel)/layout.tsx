@@ -9,6 +9,8 @@ const NAV = [
   { href: "/customers", label: "Müşteriler" },
   { href: "/orders", label: "Siparişler" },
   { href: "/campaigns", label: "Kampanyalar" },
+  { href: "/automations", label: "Otomasyonlar" },
+  { href: "/inbox", label: "Gelen kutusu" },
   { href: "/templates", label: "Şablonlar" },
   { href: "/messages", label: "Mesajlar" },
   { href: "/consents", label: "İzinler" },
@@ -21,7 +23,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
           <span className="font-semibold text-emerald-700">WhatsApp CRM</span>
-          <nav className="flex flex-1 gap-4 text-sm">
+          <nav className="flex flex-1 flex-wrap gap-x-4 gap-y-1 text-sm">
             {NAV.map((item) => (
               <Link key={item.href} href={item.href} className="text-slate-600 hover:text-slate-900">
                 {item.label}

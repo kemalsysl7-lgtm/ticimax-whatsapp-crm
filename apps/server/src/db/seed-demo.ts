@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { createDb } from "./client";
-import { consents, members, orders, templates } from "./schema";
+import { carts, chatMessages, consents, conversations, members, orders, templates } from "./schema";
 
 /**
  * Ticimax bağlantısı olmadan paneli denemek için örnek veri üretir: ~240 üye, farklı alışveriş
@@ -123,7 +123,56 @@ async function main() {
         buttons: [{ type: "URL", text: "Alışverişe başla", url: "https://magazaniz.com/{{kampanya_yolu}}" }, { type: "QUICK_REPLY", text: "Bildirimleri kapat" }],
       },
     ];
+    demoTemplates.push(
+      {
+        name: "sepet_hatirlatma_v1", category: "MARKETING", trigger: "abandoned_cart", status: "approved",
+        headerText: "Sepetin seni bekliyor",
+        body: "Merhaba {{ad}}, sepetinde {{urun_sayisi}} ürün kaldı ({{sepet_toplami}}). *{{kupon_kodu}}* koduyla siparişini tamamlayabilirsin.",
+        footer: "Mesaj almak istemiyorsanız DUR yazın",
+        buttons: [{ type: "URL", text: "Sepete dön", url: "https://magazaniz.com/{{sepet_yolu}}" }, { type: "QUICK_REPLY", text: "Bildirimleri kapat" }],
+      },
+      {
+        name: "dogum_gunu_v1", category: "MARKETING", trigger: "birthday", status: "approved",
+        body: "İyi ki doğdun {{ad}}! {{kupon_bitis}} tarihine kadar geçerli *{{kupon_kodu}}* kodu hediyemiz.",
+        footer: "Mesaj almak istemiyorsanız DUR yazın", buttons: [],
+      },
+    );
     for (const t of demoTemplates) await tx.insert(templates).values(t).onConflictDoNothing({ target: templates.name });
+
+    // Son birkaç günde güncellenmiş, bir kısmı terk edilmiş sepetler.
+    await tx.execute(sql`delete from carts where cart_id >= 700000`);
+    const buyers = memberRows.filter((m) => m.phone).slice(0, 18);
+    await tx.insert(carts).values(
+      buyers.map((m, i) => ({
+        cartId: 700000 + i,
+        memberTicimaxId: m.ticimaxId,
+        cartUpdatedAt: new Date(now - [1, 3, 5, 20, 26, 30, 50, 75, 80, 100, 130, 2, 4, 28, 60, 90, 110, 6][i]! * 3_600_000),
+        items: [
+          { name: pick(["Keten Gömlek", "Deri Kemer", "Pamuklu Tişört", "Kot Pantolon", "Hasır Şapka"]), quantity: between(1, 2), unitPrice: between(150, 900) + 0.9 },
+          ...(rand() < 0.5 ? [{ name: "Çorap Seti", quantity: 1, unitPrice: 89.9 }] : []),
+        ],
+        total: "0",
+      })),
+    );
+    await tx.execute(sql`update carts set total = (select coalesce(sum((i->>'unitPrice')::numeric * (i->>'quantity')::numeric), 0) from jsonb_array_elements(items) i) where cart_id >= 700000`);
+
+    // Örnek WhatsApp konuşmaları (gelen kutusu).
+    const talker = memberRows.find((m) => m.phone)!;
+    await tx.execute(sql`delete from chat_messages where phone in (${talker.phone}, '905551112233')`);
+    await tx.execute(sql`delete from conversations where phone in (${talker.phone}, '905551112233')`);
+    const minutesAgo = (m: number) => new Date(now - m * 60_000);
+    await tx.insert(chatMessages).values([
+      { phone: talker.phone!, direction: "in", author: "customer", text: "Merhaba, siparişim nerede?", createdAt: minutesAgo(50) },
+      { phone: talker.phone!, direction: "out", author: "bot", text: `Merhaba ${talker.firstName}! Son siparişiniz kargoda; takip linki mesajda.`, createdAt: minutesAgo(50) },
+      { phone: talker.phone!, direction: "in", author: "customer", text: "Teşekkürler, bir de beden değişimi yapmak istiyorum. Temsilciyle görüşebilir miyim?", createdAt: minutesAgo(12) },
+      { phone: talker.phone!, direction: "out", author: "bot", text: "Mesajınızı bir temsilcimize ilettim. Hafta içi 09:00-18:00 arasında size buradan dönüş yapacağız.", createdAt: minutesAgo(12) },
+      { phone: "905551112233", direction: "in", author: "customer", text: "Merhaba", createdAt: minutesAgo(300) },
+      { phone: "905551112233", direction: "out", author: "bot", text: "Merhaba! Ben mağazanın WhatsApp asistanıyım.", createdAt: minutesAgo(300) },
+    ]);
+    await tx.insert(conversations).values([
+      { phone: talker.phone!, memberTicimaxId: talker.ticimaxId, needsHuman: true, lastInboundAt: minutesAgo(12), lastMessageAt: minutesAgo(12), lastMessagePreview: "Mesajınızı bir temsilcimize ilettim." },
+      { phone: "905551112233", profileName: "Misafir", needsHuman: false, lastInboundAt: minutesAgo(300), lastMessageAt: minutesAgo(300), lastMessagePreview: "Merhaba! Ben mağazanın WhatsApp asistanıyım." },
+    ]);
   });
 
   console.log(`Demo verisi yüklendi: ${memberRows.length} üye, ${orderRows.length} sipariş, ${consentRows.length} izin kaydı.`);

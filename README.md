@@ -73,6 +73,27 @@ siparişler sayılmaz. Kurallar ve eşikler: `apps/server/src/segments/rfm.ts`.
   Müşteri adı ve segment adı otomatik doldurulur; izin, sessiz saat ve haftalık sınır her mesajda uygulanır.
   Aynı kampanya bir müşteriye iki kez gitmez.
 
+## Otomasyonlar
+
+Panelde **Otomasyonlar** sayfasından açılıp kapatılır; her biri uygun tetikleyicili, Meta onaylı bir şablona
+bağlanır. Varsayılan olarak hepsi kapalıdır. Hepsi her senkron turunda (varsayılan 15 dk) çalışır ve her
+gönderim bir tekrar önleme anahtarı taşır.
+
+| Otomasyon | Nasıl çalışır |
+|---|---|
+| Sipariş onaylandı / Kargoya verildi / Teslim edildi | Senkronda yakalanan durum değişikliklerinden. Kargoya verilince kargo paketi okunur (firma, takip no, link). İlk senkronda eski siparişlere mesaj gitmez. |
+| Terk edilmiş sepet | Son 7 günün sepetleri okunur; sepet güncellendikten sonra ayarlanan saatlerde (varsayılan 2, 24, 72) en fazla 3 hatırlatma. Üye sepetten sonra sipariş verdiyse durur. Kademe başına kupon. |
+| Fiyat düştü / Stoğa girdi | Pazarlama izni olan üyelerin Ticimax alarm listesi ayarlanan aralıkla (varsayılan 6 saat) okunur. Fiyat alarm kurulduğu andakinden en az %5 (ayarlanabilir) düşünce ya da stok 0'dan büyük olunca bir kez mesaj. |
+| Doğum günü | Her gün ayarlanan saatten (varsayılan 10:00) sonra, doğum günü olan üyelere; kupon ve bitiş tarihi. 29 Şubat doğumlular artık olmayan yıllarda 28 Şubat'ta. |
+| "Siparişim nerede?" asistanı | WhatsApp'tan yazan müşteriye, **yalnızca kendi telefonuna bağlı** siparişlerin durumunu ve kargo takibini yanıtlar. "temsilci" yazınca konuşma Gelen kutusunda işaretlenir ve asistan susar. Numara başına saatte en fazla 10 yanıt. |
+
+**Kargo takip linki:** Meta, URL butonunda yalnızca sabit adresin sonuna tek değişken eklemeye izin verir. Bu yüzden
+"Kargoya verildi" şablonundaki butonun adresi `https://<CRM alan adınız>/{{takip_yolu}}` olmalıdır; sistem imzalı
+bir link (`/t/<sipariş>-<imza>`) üretir ve tıklayanı kargo firmasının takip sayfasına yönlendirir.
+
+**Gelen kutusu:** Müşteri, asistan ve temsilci mesajları tek akışta görünür. Temsilci, müşterinin son mesajından
+itibaren 24 saat içinde serbest metinle yanıt verebilir (Meta kuralı); sonrasında yalnızca şablon mesaj gönderilebilir.
+
 Şema değişikliğinde: `src/db/schema.ts` düzenlenir, `pnpm db:generate` ile yeni migration üretilir.
 
 ## Kurulum: Meta WhatsApp Cloud API
@@ -102,7 +123,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml up -d --
 ```
 
 Caddy, alan adı için HTTPS sertifikasını otomatik alır. Sunucu her açılışta bekleyen migration'ları uygular.
-Dışarıya yalnızca panel (`/`), Meta webhook'u (`/webhooks/*`) ve `/health` açılır. Yönetim API'si (`/admin/*`)
+Dışarıya yalnızca panel (`/`), Meta webhook'u (`/webhooks/*`), kargo takip yönlendirmesi (`/t/*`) ve `/health` açılır. Yönetim API'si (`/admin/*`)
 dışarıdan erişilemez; panel ona iç Docker ağından bağlanır.
 
 ## Yönetim paneli (`apps/panel`)
@@ -146,8 +167,8 @@ Tüm `/admin/*` uç noktaları `Authorization: Bearer <ADMIN_API_TOKEN>` ister v
 | Faz | Kapsam | Durum |
 |---|---|---|
 | 1 – Temel | Ticimax adapter + üye/sipariş senkronu, WhatsApp adapter + imzalı webhook, izin defteri, şablon motoru + API, gönderim kuyruğu ve log + yönetim paneli | ✅ |
-| 2 – Hızlı kazanımlar | Kargo bildirimi, "Siparişim nerede?" chatbotu, terk edilmiş sepet | ⏳ |
-| 3 – Bildirimler | Fiyat/stok alarmı, doğum günü ve yıldönümü | ⏳ |
+| 2 – Hızlı kazanımlar | Sipariş/kargo bildirimleri, "Siparişim nerede?" asistanı + gelen kutusu, terk edilmiş sepet | ✅ |
+| 3 – Bildirimler | Fiyat düştü / stoğa girdi, doğum günü (üyelik yıldönümü: Ticimax üyelik tarihini servisle vermediği için yapılamadı) | ✅ |
 | 4 – Segmentasyon | Müşteri ve sipariş sayfaları, sipariş geçmişi doldurma, RFM segmentleri, segment kampanyaları | ✅ |
 | 5 – Uyumluluk | İYS entegrasyonu, raporlama | ⏳ |
 
@@ -158,3 +179,7 @@ Tüm `/admin/*` uç noktaları `Authorization: Bearer <ADMIN_API_TOKEN>` ister v
   (`templates/template.ts` → `META_PARAMETER_FORMAT`).
 - **İzin varsayımı:** Ticimax'te `SmsIzin=true` hem pazarlama hem bilgilendirme izni sayılıyor
   (`consent/ticimax-consent.ts`). Hukuki değerlendirmeye göre değiştirilebilir.
+- **Sepet sorgusu:** `SelectSepet` çağrısında sepet/üye id'si `-1` ile "filtre yok" varsayılıyor (Ticimax'in
+  diğer servislerindeki kural); ilk bağlantıda tüm sepetlerin geldiği kontrol edilmeli.
+- **Alarm fiyatları:** `EklenenFiyat` vitrindeki (KDV dahil) fiyat, `UrunFiyatiKdv` ise KDV tutarı kabul ediliyor
+  (`ticimax/mapper.ts` → `mapProductAlarm`). Gerçek bir alarm yanıtıyla teyit edilmeli.

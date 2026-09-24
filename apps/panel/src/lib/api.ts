@@ -1,6 +1,9 @@
 import "server-only";
 import { panelEnv } from "./env";
 import type {
+  AutomationItem,
+  ConversationDetail,
+  ConversationRow,
   CampaignRow,
   CustomerDetail,
   CustomerRow,
@@ -68,6 +71,17 @@ export const api = {
   campaigns: () => call<CampaignRow[]>("/admin/campaigns"),
   launchCampaign: (body: { name: string; segment: string; templateName: string; variables: Record<string, string> }) =>
     call<{ campaignId: number; audienceSize: number; queued: number }>("/admin/campaigns", { method: "POST", body }),
+};
+
+export const automationApi = {
+  list: () => call<AutomationItem[]>("/admin/automations"),
+  save: (key: string, body: { enabled: boolean; templateName: string | null; settings: Record<string, unknown> }) =>
+    call<unknown>(`/admin/automations/${encodeURIComponent(key)}`, { method: "PUT", body }),
+  runNow: () => call<{ started: boolean }>("/admin/automations/run-now", { method: "POST" }),
+  inbox: (filter?: string) => call<ConversationRow[]>(`/admin/inbox${qs({ filter })}`),
+  conversation: (phone: string) => call<ConversationDetail>(`/admin/inbox/${encodeURIComponent(phone)}`),
+  reply: (phone: string, text: string) => call<{ ok: true }>(`/admin/inbox/${encodeURIComponent(phone)}/reply`, { method: "POST", body: { text } }),
+  resolve: (phone: string) => call<{ ok: true }>(`/admin/inbox/${encodeURIComponent(phone)}/resolve`, { method: "POST" }),
 };
 
 function qs(params: Record<string, string | number | undefined>): string {

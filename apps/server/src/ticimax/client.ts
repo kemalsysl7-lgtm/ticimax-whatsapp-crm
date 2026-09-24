@@ -1,5 +1,17 @@
 import * as soap from "soap";
-import { mapMember, mapOrder, mapShipmentPackage, toArray, type Member, type Order, type ShipmentPackage } from "./mapper";
+import {
+  mapCart,
+  mapMember,
+  mapOrder,
+  mapProductAlarm,
+  mapShipmentPackage,
+  toArray,
+  type Cart,
+  type Member,
+  type Order,
+  type ProductAlarm,
+  type ShipmentPackage,
+} from "./mapper";
 
 /**
  * Ticimax SOAP (WCF) servisleri için istemci.
@@ -166,5 +178,39 @@ export class TicimaxClient {
     return TicimaxClient.unwrapList(result, "SelectSiparisKargoPaket", "WebKargoPaket")
       .map(mapShipmentPackage)
       .filter((p): p is ShipmentPackage => p !== null);
+  }
+
+  /**
+   * Belirli tarih aralığında güncellenmiş sepetler. Sepet/üye id'sinde -1 "filtre yok"
+   * anlamına gelir (Ticimax'in genel kuralı); ilk gerçek bağlantıda doğrulanmalı.
+   */
+  async selectCarts(params: { from: Date; to: Date }): Promise<Cart[]> {
+    const result = await this.call("SiparisServis", "SelectSepet", [-1, -1, params.from, params.to]);
+    return TicimaxClient.unwrapList(result, "SelectSepet", "WebSepet")
+      .map(mapCart)
+      .filter((c): c is Cart => c !== null);
+  }
+
+  async selectPriceAlarms(memberTicimaxId: number): Promise<ProductAlarm[]> {
+    const result = await this.call("CustomServis", "GetFiyatAlarmUrunler", [{ UyeID: memberTicimaxId }]);
+    return TicimaxClient.unwrapResponseList(result, "GetFiyatAlarmUrunler", "WebFiyatAlarmUrunler")
+      .map((r) => mapProductAlarm(r, "FiyatAlarmUrunID"))
+      .filter((a): a is ProductAlarm => a !== null);
+  }
+
+  async selectStockAlarms(memberTicimaxId: number): Promise<ProductAlarm[]> {
+    const result = await this.call("CustomServis", "GetStokAlarmUrunler", [{ UyeID: memberTicimaxId }]);
+    return TicimaxClient.unwrapResponseList(result, "GetStokAlarmUrunler", "WebStokAlarmUrunler")
+      .map((r) => mapProductAlarm(r, "StokAlarmUrunId"))
+      .filter((a): a is ProductAlarm => a !== null);
+  }
+
+  /** `{ XResult: { IsError, ErrorMessage, Urunler: { Item: [...] } } }` biçimindeki yanıtlar. */
+  private static unwrapResponseList(result: unknown, method: string, itemName: string): Record<string, unknown>[] {
+    const response = (result as Record<string, unknown> | null)?.[`${method}Result`] as Record<string, unknown> | undefined;
+    if (response?.IsError === true || response?.IsError === "true") {
+      throw new Error(`${method}: ${String(response.ErrorMessage ?? "Ticimax hata döndürdü")}`);
+    }
+    return toArray((response?.Urunler as Record<string, unknown> | undefined)?.[itemName]);
   }
 }

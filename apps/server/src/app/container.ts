@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
+import type { RunnerDeps } from "../automations/runner";
+import type { ChatbotDeps } from "../chatbot/handler";
+import { AutomationQueries } from "../db/automation-queries";
 import type { Env } from "../config/env";
 import { AdminQueries } from "../db/admin-queries";
 import { createDb } from "../db/client";
@@ -41,6 +45,7 @@ export function createContainer(env: Env) {
     phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID,
     businessAccountId: env.WHATSAPP_BUSINESS_ACCOUNT_ID,
     accessToken: env.WHATSAPP_ACCESS_TOKEN,
+    baseUrl: env.WHATSAPP_GRAPH_BASE_URL,
   });
   const ticimax = new TicimaxClient({ baseUrl: env.TICIMAX_BASE_URL, uyeKodu: env.TICIMAX_UYE_KODU });
 
@@ -96,6 +101,23 @@ export function createContainer(env: Env) {
     return { customers: result.length, computedAt: now.toISOString() };
   };
 
+  const automationQueries = new AutomationQueries(db);
+  /** Takip linki imzası için ayrı bir anahtar türetilir (ADMIN_API_TOKEN'ın kendisi dışarı çıkmaz). */
+  const trackingSecret = createHash("sha256").update(`tracking:${env.ADMIN_API_TOKEN}`).digest("hex");
+  const runnerDeps: RunnerDeps = {
+    queries: automationQueries,
+    source: ticimax,
+    mirror,
+    messages,
+    templates,
+    queue,
+    clock,
+    timezone: env.TIMEZONE,
+    trackingSecret,
+    log: (m) => console.warn(m),
+  };
+  const chatbotDeps: ChatbotDeps = { queries: automationQueries, sendText: (to, text) => graph.sendText(to, text), clock };
+
   return {
     env,
     db,
@@ -113,6 +135,10 @@ export function createContainer(env: Env) {
     adminQueries,
     campaignDeps,
     recomputeSegments,
+    automationQueries,
+    runnerDeps,
+    chatbotDeps,
+    trackingSecret,
   };
 }
 

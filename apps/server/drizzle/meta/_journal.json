@@ -15,6 +15,13 @@
       "when": 1790241186082,
       "tag": "0001_segments_campaigns",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790265268253,
+      "tag": "0002_automations_chat",
+      "breakpoints": true
     }
   ]
 }

@@ -163,6 +163,35 @@ export interface CampaignRow {
   createdAt: string | null;
 }
 
+export interface AutomationItem {
+  key: string;
+  label: string;
+  description: string;
+  trigger: string | null;
+  state: { key: string; enabled: boolean; templateName: string | null; settings: Record<string, unknown> };
+  templates: Array<{ name: string; status: TemplateStatus }>;
+}
+
+export interface ConversationRow {
+  phone: string;
+  name: string | null;
+  memberId: number | null;
+  needsHuman: boolean;
+  lastInboundAt: string | null;
+  lastMessageAt: string;
+  preview: string;
+}
+
+export interface ConversationDetail {
+  phone: string;
+  needsHuman: boolean;
+  memberId: number | null;
+  profileName: string | null;
+  windowOpen: boolean;
+  windowClosesAt: string | null;
+  messages: Array<{ id: number; direction: "in" | "out"; author: "customer" | "bot" | "agent"; text: string; createdAt: string }>;
+}
+
 /** Segment renk tonları (durum göstergesi; vurgu renginden ayrı). */
 export const SEGMENT_TONES: Record<string, string> = {
   champions: "bg-emerald-100 text-emerald-800",

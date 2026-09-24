@@ -13,6 +13,8 @@ export const envSchema = z.object({
   TICIMAX_UYE_KODU: z.string().min(1),
 
   WHATSAPP_GRAPH_API_VERSION: z.string().regex(/^v\d+\.\d+$/).default("v23.0"),
+  /** Yalnızca test/staging için; production'da tanımlanmaz. */
+  WHATSAPP_GRAPH_BASE_URL: z.string().url().default("https://graph.facebook.com"),
   WHATSAPP_PHONE_NUMBER_ID: z.string().min(1),
   WHATSAPP_BUSINESS_ACCOUNT_ID: z.string().min(1),
   WHATSAPP_ACCESS_TOKEN: z.string().min(1),
