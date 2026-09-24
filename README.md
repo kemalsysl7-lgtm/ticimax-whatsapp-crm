@@ -45,6 +45,19 @@ port arayüzleri üzerinden test edilir.
 - **Tekrar gönderim yok:** Her iş olayı bir `dedupe_key` taşır. Kuyruktaki mesaj `queued → sending`
   atomik geçişiyle yalnızca bir işçi tarafından alınır.
 
+## Hızlı demo (tek komut)
+
+Ticimax ve Meta bağlantısı olmadan, örnek veriyle (~240 müşteri) paneli açar. Yalnızca Docker gerekir:
+
+```bash
+docker compose -f deploy/docker-compose.demo.yml up --build
+```
+
+Hazır olunca http://localhost:3001 adresini açın, şifre: `demo-sifre-2026`.
+WhatsApp mesajları sahte bir Meta sunucusuna gider; kimseye gerçek mesaj gönderilmez. Sunucu
+loglarındaki "Ticimax ... ECONNREFUSED" hatası beklenir (demo'da Ticimax yok). Kapatmak ve demo
+verisini silmek için: `docker compose -f deploy/docker-compose.demo.yml down -v`.
+
 ## Yerel geliştirme
 
 ```bash
