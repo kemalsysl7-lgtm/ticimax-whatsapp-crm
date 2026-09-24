@@ -1,6 +1,6 @@
 # Tek VPS üzerinde production kurulumu. Kullanım (repo kökünden):
-#   cp .env.example deploy/.env   # değerleri doldurun
-#   DOMAIN=crm.magazaniz.com docker compose -f deploy/docker-compose.prod.yml up -d --build
+#   cp .env.example deploy/.env   # değerleri doldurun (DOMAIN, POSTGRES_PASSWORD, PANEL_* dahil)
+#   docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml up -d --build
 services:
   server:
     build:
@@ -17,6 +17,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    restart: unless-stopped
+
+  # Yönetim paneli. Sunucunun yönetim API'sine iç ağdan erişir; ADMIN_API_TOKEN tarayıcıya gitmez.
+  panel:
+    build:
+      context: ..
+      dockerfile: apps/panel/Dockerfile
+    environment:
+      API_BASE_URL: http://server:3000
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?ADMIN_API_TOKEN gerekli}
+      PANEL_PASSWORD: ${PANEL_PASSWORD:?PANEL_PASSWORD gerekli}
+      PANEL_SESSION_SECRET: ${PANEL_SESSION_SECRET:?PANEL_SESSION_SECRET gerekli}
+    depends_on:
+      - server
     restart: unless-stopped
 
   postgres:
@@ -53,6 +67,7 @@ services:
       - caddydata:/data
     depends_on:
       - server
+      - panel
     restart: unless-stopped
 
 volumes:

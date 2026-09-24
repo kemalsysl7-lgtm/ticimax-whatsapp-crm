@@ -82,15 +82,29 @@ Testler: `pnpm --filter @crm/server test` · Tip kontrolü: `pnpm --filter @crm/
 ## Production dağıtımı (tek VPS)
 
 ```bash
-cp .env.example deploy/.env    # production değerleri + POSTGRES_PASSWORD
-DOMAIN=crm.magazaniz.com docker compose -f deploy/docker-compose.prod.yml up -d --build
+cp .env.example deploy/.env    # production değerleri (DOMAIN, POSTGRES_PASSWORD, PANEL_* dahil)
+docker compose --env-file deploy/.env -f deploy/docker-compose.prod.yml up -d --build
 ```
 
 Caddy, alan adı için HTTPS sertifikasını otomatik alır. Sunucu her açılışta bekleyen migration'ları uygular.
+Dışarıya yalnızca panel (`/`), Meta webhook'u (`/webhooks/*`) ve `/health` açılır. Yönetim API'si (`/admin/*`)
+dışarıdan erişilemez; panel ona iç Docker ağından bağlanır.
+
+## Yönetim paneli (`apps/panel`)
+
+Next.js arayüzü. Özellikler: şifreli giriş, şablon listesi ve onay durumları, şablon editörü (değişken çipleri,
+buton düzenleyici, Meta kurallarıyla anlık doğrulama, WhatsApp balonu önizlemesi, Meta onayına gönderme),
+onaylı şablonla test mesajı, mesaj geçmişi, elle izin kaydı.
+
+- Tek yönetici şifresi (`PANEL_PASSWORD`). Başarılı girişte `PANEL_SESSION_SECRET` ile imzalı, 12 saat
+  geçerli, HttpOnly + SameSite=Strict bir çerez verilir. Aynı IP'den 15 dakikada 10 hatalı deneme sonrası
+  giriş geçici olarak engellenir.
+- `ADMIN_API_TOKEN` yalnızca panel sunucusunda kullanılır, tarayıcıya hiç gönderilmez.
+- Yerelde: `cd apps/panel && pnpm dev` (http://localhost:3001; kök `.env` değerlerini ortama verin).
 
 ## Yönetim API'si
 
-Tüm `/admin/*` uç noktaları `Authorization: Bearer <ADMIN_API_TOKEN>` ister. Bu, panel girişi gelene kadar geçicidir.
+Tüm `/admin/*` uç noktaları `Authorization: Bearer <ADMIN_API_TOKEN>` ister ve yalnızca panel tarafından kullanılır.
 
 | Uç nokta | Açıklama |
 |---|---|
@@ -108,7 +122,7 @@ Tüm `/admin/*` uç noktaları `Authorization: Bearer <ADMIN_API_TOKEN>` ister. 
 
 | Faz | Kapsam | Durum |
 |---|---|---|
-| 1 – Temel | Ticimax adapter + üye/sipariş senkronu, WhatsApp adapter + imzalı webhook, izin defteri, şablon motoru + API, gönderim kuyruğu ve log | ✅ Backend tamam · ⏳ yönetim paneli (arayüz) |
+| 1 – Temel | Ticimax adapter + üye/sipariş senkronu, WhatsApp adapter + imzalı webhook, izin defteri, şablon motoru + API, gönderim kuyruğu ve log + yönetim paneli | ✅ |
 | 2 – Hızlı kazanımlar | Kargo bildirimi, "Siparişim nerede?" chatbotu, terk edilmiş sepet | ⏳ |
 | 3 – Bildirimler | Fiyat/stok alarmı, doğum günü ve yıldönümü | ⏳ |
 | 4 – Segmentasyon | RFM, segment kampanyaları | ⏳ |
